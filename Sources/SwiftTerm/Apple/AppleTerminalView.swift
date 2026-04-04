@@ -1747,14 +1747,23 @@ extension TerminalView {
         if terminal.synchronizedOutputActive || inSyncSequence {
             return
         }
-        // throttle
+
+        let now = DispatchTime.now().uptimeNanoseconds
+        let recentInput = (now - lastInputTime) < inputEchoWindowNs
+
+        if recentInput {
+            // Input echo — render immediately for responsive typing
+            pendingDisplay = false
+            updateDisplay()
+            return
+        }
+
+        // No recent input — use 60fps throttle (coalesces rapid TUI redraws)
         if !pendingDisplay {
             let fps60 = 16670000
-            // let fps30 = 16670000*2
-            let fpsDelay = fps60
             pendingDisplay = true
             DispatchQueue.main.asyncAfter(
-                deadline: DispatchTime (uptimeNanoseconds: DispatchTime.now().uptimeNanoseconds + UInt64 (fpsDelay)),
+                deadline: DispatchTime (uptimeNanoseconds: now + UInt64 (fps60)),
                 execute: updateDisplay)
         }
     }
@@ -2002,6 +2011,7 @@ extension TerminalView {
      */
     public func send(data: ArraySlice<UInt8>)
     {
+        lastInputTime = DispatchTime.now().uptimeNanoseconds
         ensureCaretIsVisible ()
         #if os(iOS) || os(visionOS)
         if TerminalView.textInputDebugEnabled {

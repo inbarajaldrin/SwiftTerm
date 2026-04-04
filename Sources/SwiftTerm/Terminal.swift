@@ -1785,6 +1785,22 @@ open class Terminal {
         tdel?.clipboardCopy(source: self, content: content)
     }
     
+    // Kitty notification protocol:
+    //    ESC ] 99 ; i=<id>:d=<done> ; <body> ESC \\
+    func oscKittyNotification(_ data: ArraySlice<UInt8>) {
+        guard let text = String(bytes: data, encoding: .utf8) else { return }
+        // Split on first ";" to separate params from body
+        let separatorIndex = text.firstIndex(of: ";")
+        let body: String
+        if let idx = separatorIndex {
+            body = String(text[text.index(after: idx)...])
+        } else {
+            body = text
+        }
+        guard !body.isEmpty else { return }
+        tdel?.notify(source: self, title: "Notification", body: body)
+    }
+
     // Notifications:
     //    ESC ] 777 ; notify ; [title] ; [body] \a
     func oscNotification(_ data: ArraySlice<UInt8>) {

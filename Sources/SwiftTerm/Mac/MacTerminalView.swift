@@ -117,6 +117,10 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
     var syncEndRenderTimer: DispatchWorkItem? = nil
     /// True from first BSU until syncSequenceSettleMs after last ESU.
     var inSyncSequence: Bool = false
+    /// Timestamp of last user input sent to PTY, for input-priority rendering
+    var lastInputTime: UInt64 = 0
+    /// Window (ns) after input where renders are immediate instead of throttled
+    let inputEchoWindowNs: UInt64 = 16_000_000
     /// Milliseconds to wait after the last ESU before rendering.
     /// Terminal multiplexers deliver screen repaints as multiple BSU/ESU
     /// pairs across separate I/O callbacks. This window lets the full
@@ -523,7 +527,7 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         }
     }
 
-    let scrollerStyle: NSScroller.Style = .legacy
+    let scrollerStyle: NSScroller.Style = .overlay
 
     func getScrollerFrame() -> CGRect {
         let scrollerWidth = NSScroller.scrollerWidth(for: .regular, scrollerStyle: scrollerStyle)
@@ -543,12 +547,13 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
                 scroller.trailingAnchor.constraint(equalTo: trailingAnchor),
                 scroller.topAnchor.constraint(equalTo: topAnchor),
                 scroller.bottomAnchor.constraint(equalTo: bottomAnchor),
-                scroller.widthAnchor.constraint(equalToConstant: scrollerWidth)
+                scroller.widthAnchor.constraint(equalToConstant: 0)
             ])
         }
         scroller.scrollerStyle = scrollerStyle
         scroller.knobProportion = 0.1
         scroller.isEnabled = false
+        scroller.alphaValue = 0
         if let progressBarView {
             addSubview(progressBarView, positioned: .above, relativeTo: scroller)
         }
@@ -2390,6 +2395,10 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
 
     open func bell(source: Terminal) {
         terminalDelegate?.bell (source: self)
+    }
+
+    open func notify(source: Terminal, title: String, body: String) {
+        // Subclasses override to handle OSC 99 / OSC 777 notifications
     }
 
     public func progressReport(source: Terminal, report: Terminal.ProgressReport) {
